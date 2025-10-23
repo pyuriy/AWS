@@ -1,2 +1,2 @@
 # AWS
-All I ollected for AWS
+All I collected for AWS
