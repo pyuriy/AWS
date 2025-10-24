@@ -1,4 +1,4 @@
-## Steps for and terraform code to create a DynamoDB instance on AWS and connect to it via NoSQL Workbench app
+## Create a DynamoDB instance on AWS with terraform and connect to it via NoSQL Workbench app
 
 ### Prerequisites
 Before proceeding, ensure you have:
