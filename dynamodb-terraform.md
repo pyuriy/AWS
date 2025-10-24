@@ -102,3 +102,94 @@ Type `yes` when prompted.
 - **Region mismatch**: Tables are region-specific; ensure NoSQL Workbench uses the same region as Terraform.
 - **Terraform errors**: Run `terraform validate` to check syntax.
 - For advanced features (e.g., global secondary indexes), extend the `aws_dynamodb_table` resource accordingly. Refer to [Terraform AWS DynamoDB docs](https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/dynamodb_table).
+
+
+## Steps to configure the required access on AWS side
+### Prerequisites for AWS Access Configuration
+Before configuring access, ensure:
+- You have an AWS account and are signed in to the [AWS Management Console](https://console.aws.amazon.com/) as an IAM administrator (or have permissions to manage IAM).
+- Decide on the authentication method: IAM user (recommended for long-term access) or IAM role (for EC2 or temporary sessions). This guide focuses on an IAM user for simplicity.
+
+The required permissions for creating a DynamoDB table via Terraform and connecting/querying via NoSQL Workbench include:
+- `dynamodb:CreateTable`, `dynamodb:DescribeTable`, `dynamodb:PutItem`, `dynamodb:GetItem`, `dynamodb:UpdateItem`, `dynamodb:DeleteItem`, `dynamodb:Scan`, `dynamodb:Query` (and related actions).
+- Use the managed policy `AmazonDynamoDBFullAccess` for full access, or a custom policy for least privilege.
+
+### Step 1: Create an IAM User (If You Don't Have One)
+1. In the AWS Console, navigate to **IAM** > **Users** > **Create user**.
+2. Enter a user name (e.g., `dynamodb-terraform-user`).
+3. Select **Provide user access to the AWS Management Console** if you want console login (optional; skip for programmatic access only).
+4. On the **Set permissions** page, choose **Attach policies directly**.
+5. Search for and select `AmazonDynamoDBFullAccess`.
+6. Click **Next** > **Create user**.
+7. Note the user ARN (e.g., `arn:aws:iam::123456789012:user/dynamodb-terraform-user`).
+
+### Step 2: Generate Access Keys for the IAM User
+1. In IAM > **Users**, select your new user > **Security credentials** tab.
+2. Under **Access keys**, click **Create access key**.
+3. Select **Command Line Interface (CLI)** or **Application running outside AWS** as the use case.
+4. Acknowledge the recommendations, then click **Create access key**.
+5. Download the `.csv` file containing:
+   - **Access key ID** (e.g., `AKIAIOSFODNN7EXAMPLE`).
+   - **Secret access key** (e.g., `wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY`).
+6. **Important**: Store these securely; you won't see the secret key again. Delete unused keys to avoid security risks.
+
+### Step 3: Configure AWS CLI with the Credentials
+1. Install AWS CLI if not already (download from [AWS CLI docs](https://aws.amazon.com/cli/)).
+2. Run `aws configure` in your terminal.
+3. Enter:
+   - **AWS Access Key ID**: From Step 2.
+   - **AWS Secret Access Key**: From Step 2.
+   - **Default region name**: e.g., `us-east-1` (match your Terraform config).
+   - **Default output format**: `json` (optional).
+4. Verify: Run `aws sts get-caller-identity` to confirm the user is active.
+
+This creates a profile (default) that Terraform and NoSQL Workbench can use.
+
+### Step 4: (Optional) Create a Custom IAM Policy for Least Privilege
+If you prefer not to use the full `AmazonDynamoDBFullAccess` policy:
+1. In IAM > **Policies** > **Create policy**.
+2. Switch to **JSON** tab and paste:
+   ```json
+   {
+       "Version": "2012-10-17",
+       "Statement": [
+           {
+               "Effect": "Allow",
+               "Action": [
+                   "dynamodb:CreateTable",
+                   "dynamodb:DescribeTable",
+                   "dynamodb:PutItem",
+                   "dynamodb:GetItem",
+                   "dynamodb:UpdateItem",
+                   "dynamodb:DeleteItem",
+                   "dynamodb:Scan",
+                   "dynamodb:Query",
+                   "dynamodb:BatchGetItem",
+                   "dynamodb:BatchWriteItem",
+                   "dynamodb:UpdateTimeToLive"
+               ],
+               "Resource": "arn:aws:dynamodb:*:*:table/MyTable"  // Replace with your table ARN or use "*" for all tables
+           }
+       ]
+   }
+   ```
+3. Click **Next** > Add tags (optional) > Name it (e.g., `DynamoDBTerraformAccess`) > **Create policy**.
+4. Attach this policy to your IAM user (IAM > Users > [User] > Add permissions > Attach policies).
+
+### Step 5: Test Access
+1. **For Terraform**: Run `terraform plan` in your project directory. It should detect no permission issues.
+2. **For NoSQL Workbench**:
+   - Launch the app > **Connect to DynamoDB** > **AWS Profile**.
+   - Select your profile (from `aws configure`).
+   - If connected, list tables to see `MyTable` (after `terraform apply`).
+3. In AWS Console: IAM > Users > [User] > **Access Advisor** to monitor usage.
+
+### Additional Notes
+- **Security Best Practices**: Use MFA on the IAM user, rotate keys regularly, and avoid root account credentials.
+- **For Roles (e.g., EC2)**: Instead of a user, create an IAM role with the policy attached, and assume it via `aws sts assume-role`.
+- **Troubleshooting**:
+  - **Access Denied**: Check policy attachments and resource ARNs (e.g., region-specific).
+  - **No Tables Visible**: Ensure the region matches and table is created.
+- Refer to [AWS IAM Docs](https://docs.aws.amazon.com/IAM/latest/UserGuide/) for advanced setups.
+
+This setup enables seamless access for both tools. If you need steps for a specific scenario (e.g., cross-account access), provide more details!
